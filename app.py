@@ -18,15 +18,6 @@ except ImportError as e:
     st.error("Make sure sheets_handler.py and pdf_extractor.py are in your repository")
     st.stop()
 
-def get_sheets_handler():
-    """Get SheetsHandler instance"""
-    try:
-        return SheetsHandler()
-    except Exception as e:
-        st.error(f"Failed to initialize Google Sheets connection: {e}")
-        st.info("Check your Google Sheets credentials in Streamlit secrets")
-        return None
-
 # Page config
 st.set_page_config(
     page_title="Bulking Analysis Dashboard",
@@ -318,7 +309,8 @@ def main():
     )
     
     if uploaded_file is not None:
-        with st.sidebar.spinner("Processing PDF..."):
+        # Show processing message
+        with st.spinner("Processing PDF..."):
             nutrition_df = process_uploaded_pdf(uploaded_file)
             
             if not nutrition_df.empty:
@@ -331,9 +323,10 @@ def main():
                 
                 # Save button
                 if st.sidebar.button("💾 Save to Google Sheets"):
-                    result = save_nutrition_data(nutrition_df)
-                    st.sidebar.success(result)
-                    st.sidebar.info("📝 Click 'Refresh Data' to see updates in analysis")
+                    with st.spinner("Saving to Google Sheets..."):
+                        result = save_nutrition_data(nutrition_df)
+                        st.sidebar.success(result)
+                        st.sidebar.info("📝 Click 'Refresh Data' to see updates in analysis")
             else:
                 st.sidebar.error("Failed to extract data from PDF")
     
