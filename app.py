@@ -26,7 +26,30 @@ def get_sheets_handler():
         st.error(f"Failed to initialize Google Sheets connection: {e}")
         st.info("Check your Google Sheets credentials in Streamlit secrets")
         return None
-
+def process_uploaded_pdf(uploaded_file):
+    """Process uploaded PDF and extract nutrition data"""
+    try:
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            tmp_file.write(uploaded_file.getbuffer())
+            tmp_path = tmp_file.name
+        
+        # Extract data
+        extractor = LifesumPDFExtractor()
+        extractor.extract_pdf_data(tmp_path)
+        
+        # Clean up temp file
+        os.unlink(tmp_path)
+        
+        # Get extracted data
+        nutrition_df = extractor.get_daily_nutrition_df()
+        
+        return nutrition_df
+        
+    except Exception as e:
+        st.error(f"Error processing PDF: {e}")
+        return pd.DataFrame()
+    
 # Page config
 st.set_page_config(
     page_title="Bulking Analysis Dashboard",
