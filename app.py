@@ -10,8 +10,13 @@ from pathlib import Path
 import tempfile
 
 # Import our modules
-from pdf_extractor import LifesumPDFExtractor
-from sheets_handler import SheetsHandler
+try:
+    from pdf_extractor import LifesumPDFExtractor
+    from sheets_handler import SheetsHandler
+except ImportError as e:
+    st.error(f"Import error: {e}")
+    st.error("Make sure sheets_handler.py and pdf_extractor.py are in your repository")
+    st.stop()
 
 # Page config
 st.set_page_config(
@@ -99,7 +104,7 @@ def load_nutrition_data(nutrition_file=None):
 
 def load_nutrition_data():
     """Load nutrition data from Google Sheets"""
-    sheets = init_sheets_handler()
+    sheets = get_sheets_handler()
     
     if sheets is None:
         st.error("Cannot load nutrition data - Google Sheets connection failed")
@@ -346,14 +351,17 @@ def main():
         st.sidebar.write(f"Nutrition dates: {nutrition_data['date'].min()} to {nutrition_data['date'].max()}")
     
     # Show connection status
-    sheets = init_sheets_handler()
-    sheet_info = sheets.get_sheet_info()
-    
-    if sheet_info['connected']:
-        st.sidebar.success("🔗 Connected to Google Sheets")
+    sheets = get_sheets_handler()
+    if sheets is not None:
+        sheet_info = sheets.get_sheet_info()
+        
+        if sheet_info['connected']:
+            st.sidebar.success("🔗 Connected to Google Sheets")
+        else:
+            st.sidebar.error("❌ Google Sheets connection failed")
+            st.sidebar.error(f"Error: {sheet_info.get('error', 'Unknown error')}")
     else:
-        st.sidebar.error("❌ Google Sheets connection failed")
-        st.sidebar.error(f"Error: {sheet_info.get('error', 'Unknown error')}")
+        st.sidebar.error("❌ Could not initialize Google Sheets connection")
     
     # Show file structure info
     st.sidebar.markdown("""
