@@ -18,6 +18,15 @@ except ImportError as e:
     st.error("Make sure sheets_handler.py and pdf_extractor.py are in your repository")
     st.stop()
 
+def get_sheets_handler():
+    """Get SheetsHandler instance"""
+    try:
+        return SheetsHandler()
+    except Exception as e:
+        st.error(f"Failed to initialize Google Sheets connection: {e}")
+        st.info("Check your Google Sheets credentials in Streamlit secrets")
+        return None
+
 # Page config
 st.set_page_config(
     page_title="Bulking Analysis Dashboard",
