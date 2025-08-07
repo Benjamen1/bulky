@@ -100,6 +100,11 @@ def load_nutrition_data(nutrition_file=None):
 def load_nutrition_data():
     """Load nutrition data from Google Sheets"""
     sheets = init_sheets_handler()
+    
+    if sheets is None:
+        st.error("Cannot load nutrition data - Google Sheets connection failed")
+        return pd.DataFrame()
+    
     df = sheets.load_nutrition_data()
     
     if not df.empty:
