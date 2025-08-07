@@ -135,22 +135,39 @@ def load_nutrition_data(nutrition_file=None):
     return None
 
 
-def load_nutrition_data():
+def load_nutrition_data(self):
     """Load nutrition data from Google Sheets"""
-    sheets = get_sheets_handler()
-    
-    if sheets is None:
-        st.error("Cannot load nutrition data - Google Sheets connection failed")
+    try:
+        worksheet = self.spreadsheet.worksheet("daily_nutrition")
+        data = worksheet.get_all_records()
+        
+        if not data:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(data)
+        
+        # Fix date parsing - handle both YYYY-MM-DD and DD/MM/YYYY formats
+        df['date'] = pd.to_datetime(df['date'], format='mixed', dayfirst=False).dt.date
+        
+        # Convert numeric columns
+        numeric_columns = ['calories', 'carbs_total', 'carbs_fiber', 'carbs_sugar', 
+                         'fat_total', 'fat_saturated', 'fat_unsaturated', 
+                         'cholesterol', 'protein', 'potassium', 'sodium']
+        
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        df = df.sort_values('date').reset_index(drop=True)
+        
+        # Remove duplicates (keep most recent)
+        df = df.drop_duplicates(subset=['date'], keep='last')
+        
+        return df
+        
+    except Exception as e:
+        st.error(f"Error loading nutrition data: {e}")
         return pd.DataFrame()
-    
-    df = sheets.load_nutrition_data()
-    
-    if not df.empty:
-        st.success(f"✅ Loaded {len(df)} nutrition records from Google Sheets")
-    else:
-        st.warning("No nutrition data found in Google Sheets")
-    
-    return df
 
 def save_weight_entry(entry_date, weight_kg):
     """Save weight entry to Google Sheets"""
