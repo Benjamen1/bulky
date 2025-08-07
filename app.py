@@ -385,16 +385,23 @@ def main():
             rolling_df = calculate_rolling_averages(merged_df)
             
             # Display data overview
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
                 st.metric("Total Days", len(merged_df))
             
             with col2:
                 avg_calories = merged_df['calories'].mean()
-                st.metric("Avg Daily Calories", f"{avg_calories:.0f}")
+                st.metric("Avg Daily Calories (Lifesum)", f"{avg_calories:.0f}")
             
             with col3:
+                if 'macro_calories' in merged_df.columns:
+                    avg_macro_calories = merged_df['macro_calories'].mean()
+                    st.metric("Avg Daily Calories (Macro Calc)", f"{avg_macro_calories:.0f}")
+                else:
+                    st.metric("Macro Calculated Calories", "N/A")
+            
+            with col4:
                 weekly_change = calculate_weekly_weight_change(merged_df)
                 if weekly_change:
                     st.metric("Weekly Weight Change", f"{weekly_change:.2f} kg")
@@ -429,17 +436,18 @@ def main():
                 st.subheader("Recommended Macros")
                 target_calories = lean_bulk
                 
-                # Macro calculations for lean bulk
-                protein_g = 220
-                fat_g = 180
-                # Calculate remaining carbs from leftover calories
-                remaining_cals = target_calories - (protein_g * 4) - (fat_g * 9)
-                carbs_g = remaining_cals / 4
+                # Updated macro targets
+                protein_g = 250
+                fat_g = 200
+                carbs_g = 231
                 
-                st.write(f"**For {target_calories:.0f} calories/day:**")
-                st.write(f"• **Protein:** {protein_g}g ({protein_g*4} cal, {protein_g*4/target_calories*100:.0f}%)")
-                st.write(f"• **Fat:** {fat_g}g ({fat_g*9} cal, {fat_g*9/target_calories*100:.0f}%)")
-                st.write(f"• **Carbs:** {carbs_g:.0f}g ({carbs_g*4:.0f} cal, {carbs_g*4/target_calories*100:.0f}%)")
+                # Calculate total calories from macros
+                actual_target_calories = (protein_g * 4) + (fat_g * 9) + (carbs_g * 4)
+                
+                st.write(f"**Target Macros ({actual_target_calories:.0f} calories/day):**")
+                st.write(f"• **Protein:** {protein_g}g ({protein_g*4} cal, {protein_g*4/actual_target_calories*100:.0f}%)")
+                st.write(f"• **Fat:** {fat_g}g ({fat_g*9} cal, {fat_g*9/actual_target_calories*100:.0f}%)")
+                st.write(f"• **Carbs:** {carbs_g}g ({carbs_g*4} cal, {carbs_g*4/actual_target_calories*100:.0f}%)")
                 
                 st.info("💡 **Simple Rules:**\n• 100g meat ≈ 25g protein, 15g fat\n• 1 egg ≈ 6g protein, 6g fat\n• 1 tbsp honey ≈ 15g carbs")
             
@@ -496,7 +504,7 @@ def main():
                         current_carbs = merged_df['carbs_total'].mean()
                         
                         st.write(f"**Current Fat:** {current_fat:.0f}g vs Target: {fat_g}g")
-                        st.write(f"**Current Carbs:** {current_carbs:.0f}g vs Target: {carbs_g:.0f}g")
+                        st.write(f"**Current Carbs:** {current_carbs:.0f}g vs Target: {carbs_g}g")
             
             # Data preview
             with st.expander("📋 View Raw Data"):
