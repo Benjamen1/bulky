@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import os
 from pathlib import Path
 
@@ -238,6 +238,58 @@ def main():
     if st.sidebar.button("🔄 Refresh Data"):
         st.rerun()
     
+    # Weight Entry Form
+    st.sidebar.header("⚖️ Add Weight Entry")
+    
+    # Load current weight data to check for duplicates
+    weight_df = load_weight_data()
+    
+    with st.sidebar.form("weight_entry_form"):
+        # Default to today's date
+        entry_date = st.date_input(
+            "Date",
+            value=date.today(),
+            help="Select the date for this weight entry"
+        )
+        
+        entry_weight = st.number_input(
+            "Weight (kg)",
+            min_value=40.0,
+            max_value=200.0,
+            value=80.0,
+            step=0.1,
+            help="Enter your weight in kilograms"
+        )
+        
+        submitted = st.form_submit_button("💾 Save Weight")
+        
+        if submitted:
+            if weight_df is not None:
+                updated_df, message = add_weight_entry(weight_df, entry_date, entry_weight)
+                
+                if updated_df is not None:
+                    # Save the updated data
+                    if save_weight_data(updated_df):
+                        st.success(message)
+                        st.info("📝 Data saved! Click 'Refresh Data' to see updates in the analysis.")
+                        
+                        # Show if this was an update or new entry
+                        if "Updated" in message:
+                            st.warning("⚠️ You updated an existing entry")
+                    else:
+                        st.error("Failed to save data")
+                else:
+                    st.error(message)
+            else:
+                st.error("Could not load weight data")
+    
+    # Show recent weight entries
+    if weight_df is not None and len(weight_df) > 0:
+        st.sidebar.subheader("📋 Recent Entries")
+        recent_entries = weight_df.tail(5)[['date', 'weight_kg']].copy()
+        recent_entries['date'] = recent_entries['date'].astype(str)
+        st.sidebar.dataframe(recent_entries, hide_index=True)
+    
     # Load data automatically
     st.sidebar.write("**Weight Data:**")
     weight_df = load_weight_data()
@@ -256,10 +308,11 @@ def main():
     
     # Show file structure info
     st.sidebar.markdown("""
-    **Expected file structure:**
+    **File structure:**
     ```
-    📁 Project Root
+    📁 GitHub Repository
     ├── app.py
+    ├── pdf_extractor.py
     └── data/
         ├── daily_weight.csv
         └── lifesum/
@@ -267,6 +320,7 @@ def main():
             ├── report2.pdf
             └── ...
     ```
+    **To update data:** Use form above or push files to GitHub
     """)
     
     # Main analysis
