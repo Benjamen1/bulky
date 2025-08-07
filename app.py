@@ -134,6 +134,7 @@ def load_nutrition_data(nutrition_file=None):
             return None
     return None
 
+
 def load_nutrition_data():
     """Load nutrition data from Google Sheets"""
     sheets = get_sheets_handler()
@@ -150,6 +151,41 @@ def load_nutrition_data():
         st.warning("No nutrition data found in Google Sheets")
     
     return df
+
+def save_weight_entry(entry_date, weight_kg):
+    """Save weight entry to Google Sheets"""
+    sheets = get_sheets_handler()
+    if sheets is None:
+        return "Failed to connect to Google Sheets"
+    
+    result = sheets.save_weight_entry(entry_date, weight_kg)
+    return result
+
+def save_nutrition_data(nutrition_df):
+    """Save nutrition data to Google Sheets"""
+    if nutrition_df.empty:
+        st.warning("No data to save - DataFrame is empty")
+        return "No data to save"
+    
+    st.info(f"Attempting to save {len(nutrition_df)} rows to Google Sheets")
+    
+    sheets = get_sheets_handler()
+    if sheets is None:
+        st.error("Failed to connect to Google Sheets")
+        return "Failed to connect to Google Sheets"
+    
+    st.info("Connected to Google Sheets successfully")
+    
+    try:
+        result = sheets.save_nutrition_data(nutrition_df)
+        st.info(f"Save result: {result}")
+        return result
+    except Exception as e:
+        st.error(f"Error saving to sheets: {e}")
+        import traceback
+        st.error(f"Full error: {traceback.format_exc()}")
+        return f"Error: {e}"
+
 
 def merge_data(weight_df, nutrition_df):
     """Merge weight and nutrition data"""
