@@ -35,7 +35,7 @@ class SheetsHandler:
             st.error(f"Failed to connect to Google Sheets: {e}")
             st.error("Please check your credentials in Streamlit secrets.")
     
-def load_weight_data(self):
+    def load_weight_data(self):
         """Load weight data from Google Sheets"""
         try:
             worksheet = self.spreadsheet.worksheet("daily_weight")
@@ -58,41 +58,39 @@ def load_weight_data(self):
             st.error(f"Error loading weight data: {e}")
             return pd.DataFrame(columns=['date', 'weight_kg'])
     
-def load_nutrition_data(self):
-    """Load nutrition data from Google Sheets"""
-    try:
-        worksheet = self.spreadsheet.worksheet("daily_nutrition")
-        data = worksheet.get_all_records()
-        
-        if not data:
+    def load_nutrition_data(self):
+        """Load nutrition data from Google Sheets"""
+        try:
+            worksheet = self.spreadsheet.worksheet("daily_nutrition")
+            data = worksheet.get_all_records()
+            
+            if not data:
+                return pd.DataFrame()
+            
+            df = pd.DataFrame(data)
+            df['date'] = pd.to_datetime(df['date']).dt.date
+            
+            # Convert numeric columns
+            numeric_columns = ['calories', 'carbs_total', 'carbs_fiber', 'carbs_sugar', 
+                             'fat_total', 'fat_saturated', 'fat_unsaturated', 
+                             'cholesterol', 'protein', 'potassium', 'sodium']
+            
+            for col in numeric_columns:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+            df = df.sort_values('date').reset_index(drop=True)
+            
+            # Remove duplicates (keep most recent)
+            df = df.drop_duplicates(subset=['date'], keep='last')
+            
+            return df
+            
+        except Exception as e:
+            st.error(f"Error loading nutrition data: {e}")
             return pd.DataFrame()
-        
-        df = pd.DataFrame(data)
-        
-        # Fix date parsing - handle both YYYY-MM-DD and DD/MM/YYYY formats
-        df['date'] = pd.to_datetime(df['date'], format='mixed', dayfirst=False).dt.date
-        
-        # Convert numeric columns
-        numeric_columns = ['calories', 'carbs_total', 'carbs_fiber', 'carbs_sugar', 
-                         'fat_total', 'fat_saturated', 'fat_unsaturated', 
-                         'cholesterol', 'protein', 'potassium', 'sodium']
-        
-        for col in numeric_columns:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-        df = df.sort_values('date').reset_index(drop=True)
-        
-        # Remove duplicates (keep most recent)
-        df = df.drop_duplicates(subset=['date'], keep='last')
-        
-        return df
-        
-    except Exception as e:
-        st.error(f"Error loading nutrition data: {e}")
-        return pd.DataFrame()
     
-def save_weight_entry(self, entry_date, weight_kg):
+    def save_weight_entry(self, entry_date, weight_kg):
         """Save or update a weight entry"""
         try:
             worksheet = self.spreadsheet.worksheet("daily_weight")
@@ -126,7 +124,7 @@ def save_weight_entry(self, entry_date, weight_kg):
             st.error(f"Error saving weight data: {e}")
             return f"Error: {e}"
     
-def save_nutrition_data(self, nutrition_df):
+    def save_nutrition_data(self, nutrition_df):
         """Save nutrition data to Google Sheets"""
         try:
             worksheet = self.spreadsheet.worksheet("daily_nutrition")
@@ -160,7 +158,7 @@ def save_nutrition_data(self, nutrition_df):
             st.error(f"Error saving nutrition data: {e}")
             return f"Error: {e}"
     
-def get_sheet_info(self):
+    def get_sheet_info(self):
         """Get basic info about the sheets"""
         try:
             weight_ws = self.spreadsheet.worksheet("daily_weight")
