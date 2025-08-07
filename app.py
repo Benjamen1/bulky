@@ -18,6 +18,48 @@ st.set_page_config(
     layout="wide"
 )
 
+def save_weight_data(weight_df):
+    """Save weight data back to CSV"""
+    try:
+        weight_file = Path("data/daily_weight.csv")
+        weight_df.to_csv(weight_file, index=False)
+        return True
+    except Exception as e:
+        st.error(f"Error saving weight data: {e}")
+        return False
+
+def add_weight_entry(weight_df, new_date, new_weight):
+    """Add or update a weight entry"""
+    # Convert date to match existing format
+    if isinstance(new_date, date):
+        new_date = new_date.strftime('%Y-%m-%d')
+    elif isinstance(new_date, str):
+        # Ensure it's in YYYY-MM-DD format
+        try:
+            parsed_date = datetime.strptime(new_date, '%Y-%m-%d').date()
+            new_date = parsed_date.strftime('%Y-%m-%d')
+        except:
+            return None, "Invalid date format"
+    
+    # Check if date already exists
+    existing_dates = weight_df['date'].astype(str).values
+    
+    if new_date in existing_dates:
+        # Update existing entry
+        weight_df.loc[weight_df['date'].astype(str) == new_date, 'weight_kg'] = new_weight
+        return weight_df, f"Updated weight for {new_date}"
+    else:
+        # Add new entry
+        new_row = pd.DataFrame({
+            'date': [new_date], 
+            'weight_kg': [new_weight]
+        })
+        weight_df = pd.concat([weight_df, new_row], ignore_index=True)
+        # Sort by date
+        weight_df['date'] = pd.to_datetime(weight_df['date']).dt.date
+        weight_df = weight_df.sort_values('date').reset_index(drop=True)
+        return weight_df, f"Added new weight entry for {new_date}"
+
 def load_weight_data():
     """Load weight data from data/daily_weight.csv"""
     weight_file = Path("data/daily_weight.csv")
