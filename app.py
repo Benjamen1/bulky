@@ -90,12 +90,26 @@ def merge_data(weight_df, nutrition_df):
     merged = pd.merge(nutrition_df, weight_df, on='date', how='inner')
     merged = merged.sort_values('date').reset_index(drop=True)
     
+    # Calculate macro-based calories
+    merged['macro_calories'] = (merged['protein'] * 4) + (merged.get('fat_total', merged.get('fat_saturated', 0)) * 9) + (merged.get('carbs_total', 0) * 4)
+    
     # Calculate next-day weight change
-    merged['next_day_weight'] = merged['weight_kg'].shift(-1)
+    # First, let's see what dates we have after the initial merge
+    print(f"After initial merge: {len(merged)} rows, dates {merged['date'].min()} to {merged['date'].max()}")
+    
+    # Create a copy of weight data shifted by one day for easier merging
+    weight_next_day = weight_df.copy()
+    weight_next_day['date'] = weight_next_day['date'] - pd.Timedelta(days=1)
+    weight_next_day = weight_next_day.rename(columns={'weight_kg': 'next_day_weight'})
+    
+    # Merge with next day weights
+    merged = pd.merge(merged, weight_next_day[['date', 'next_day_weight']], on='date', how='left')
+    
+    # Calculate weight change
     merged['weight_change'] = merged['next_day_weight'] - merged['weight_kg']
     
-    # Remove last row (no next day data)
-    merged = merged[:-1].copy()
+    # Only keep rows where we have next day weight data
+    merged = merged.dropna(subset=['next_day_weight']).copy()
     
     return merged
 
@@ -231,6 +245,15 @@ def main():
     st.sidebar.write("**Nutrition Data:**")
     nutrition_data = extract_pdfs_to_nutrition_data()
     
+    # Debug information
+    if weight_df is not None:
+        st.sidebar.write(f"Weight records: {len(weight_df)} days")
+        st.sidebar.write(f"Weight dates: {weight_df['date'].min()} to {weight_df['date'].max()}")
+    
+    if nutrition_data is not None and not nutrition_data.empty:
+        st.sidebar.write(f"Nutrition records: {len(nutrition_data)} days") 
+        st.sidebar.write(f"Nutrition dates: {nutrition_data['date'].min()} to {nutrition_data['date'].max()}")
+    
     # Show file structure info
     st.sidebar.markdown("""
     **Expected file structure:**
@@ -252,6 +275,11 @@ def main():
         if weight_df is not None and not nutrition_data.empty:
             # Merge datasets
             merged_df = merge_data(weight_df, nutrition_data)
+            
+            # Debug the merge process
+            st.sidebar.write(f"**After merge:** {len(merged_df)} days")
+            if not merged_df.empty:
+                st.sidebar.write(f"Merged dates: {merged_df['date'].min()} to {merged_df['date'].max()}")
             
             if len(merged_df) == 0:
                 st.error("No matching dates found between weight and nutrition data. Check your date formats.")
@@ -301,13 +329,42 @@ def main():
                 
                 st.write(f"**Lean Bulk (slow gain):** {lean_bulk:.0f} calories/day")
                 st.write(f"**Moderate Bulk:** {aggressive_bulk:.0f} calories/day")
+                
+                st.subheader("Recommended Macros")
+                target_calories = lean_bulk
+                
+                # Macro calculations for lean bulk
+                protein_g = 220
+                fat_g = 180
+                # Calculate remaining carbs from leftover calories
+                remaining_cals = target_calories - (protein_g * 4) - (fat_g * 9)
+                carbs_g = remaining_cals / 4
+                
+                st.write(f"**For {target_calories:.0f} calories/day:**")
+                st.write(f"• **Protein:** {protein_g}g ({protein_g*4} cal, {protein_g*4/target_calories*100:.0f}%)")
+                st.write(f"• **Fat:** {fat_g}g ({fat_g*9} cal, {fat_g*9/target_calories*100:.0f}%)")
+                st.write(f"• **Carbs:** {carbs_g:.0f}g ({carbs_g*4:.0f} cal, {carbs_g*4/target_calories*100:.0f}%)")
+                
+                st.info("💡 **Simple Rules:**\n• 100g meat ≈ 25g protein, 15g fat\n• 1 egg ≈ 6g protein, 6g fat\n• 1 tbsp honey ≈ 15g carbs")
             
             with col2:
                 st.subheader("Current Progress")
                 current_avg = merged_df['calories'].mean()
-                if current_avg > maintenance_cals + 200:
+                current_protein = merged_df['protein'].mean()
+                
+                # Calculate actual calories from macros if available
+                if 'carbs_total' in merged_df.columns and 'fat_total' in merged_df.columns:
+                    actual_calories = (current_protein * 4) + (merged_df['fat_total'].mean() * 9) + (merged_df['carbs_total'].mean() * 4)
+                    st.write(f"**Lifesum shows:** {current_avg:.0f} calories/day")
+                    st.write(f"**Macro calculation:** {actual_calories:.0f} calories/day")
+                    st.info("💡 Trust macro calculation over Lifesum's calorie display")
+                    comparison_calories = actual_calories
+                else:
+                    comparison_calories = current_avg
+                
+                if comparison_calories > maintenance_cals + 200:
                     st.success("✅ You're in a caloric surplus - should be gaining weight")
-                elif current_avg < maintenance_cals - 200:
+                elif comparison_calories < maintenance_cals - 200:
                     st.warning("⚠️ You're in a caloric deficit - may lose weight")
                 else:
                     st.info("ℹ️ You're near maintenance - weight should be stable")
@@ -317,14 +374,63 @@ def main():
                         st.success(f"✅ Good rate of gain: {weekly_change:.2f} kg/week")
                     elif weekly_change > 0.5:
                         st.warning(f"⚠️ Gaining too fast: {weekly_change:.2f} kg/week - consider reducing calories")
-                    elif weekly_change < 0:
+                    elif weekly_change < -0.1:
                         st.error(f"❌ Losing weight: {weekly_change:.2f} kg/week - increase calories")
                     else:
-                        st.info(f"ℹ️ Slow gain: {weekly_change:.2f} kg/week - consider increasing calories")
+                        st.info(f"ℹ️ Slow gain: {weekly_change:.2f} kg/week - consider increasing calories slightly")
+                
+                st.subheader("Macro Comparison")
+                if not merged_df.empty:
+                    current_protein_avg = merged_df['protein'].mean()
+                    
+                    # Show current vs target macros
+                    st.write(f"**Current Protein:** {current_protein_avg:.0f}g vs Target: {protein_g}g")
+                    
+                    protein_diff = current_protein_avg - protein_g
+                    if abs(protein_diff) <= 20:
+                        st.write("✅ Protein intake is on target")
+                    elif protein_diff > 20:
+                        st.write(f"⬆️ Protein is {protein_diff:.0f}g above target (good for bulking)")
+                    else:
+                        st.write(f"⬇️ Protein is {abs(protein_diff):.0f}g below target - add more meat/eggs")
+                    
+                    # Show macro breakdown if available
+                    if 'carbs_total' in merged_df.columns and 'fat_total' in merged_df.columns:
+                        current_fat = merged_df['fat_total'].mean()
+                        current_carbs = merged_df['carbs_total'].mean()
+                        
+                        st.write(f"**Current Fat:** {current_fat:.0f}g vs Target: {fat_g}g")
+                        st.write(f"**Current Carbs:** {current_carbs:.0f}g vs Target: {carbs_g:.0f}g")
             
             # Data preview
             with st.expander("📋 View Raw Data"):
-                st.dataframe(merged_df[['date', 'weight_kg', 'calories', 'protein', 'weight_change']].head(10))
+                # Show key columns including macro calculation
+                display_columns = ['date', 'weight_kg', 'calories', 'macro_calories', 'protein', 'weight_change']
+                available_columns = [col for col in display_columns if col in merged_df.columns]
+                
+                # Add fat and carbs if available
+                if 'fat_total' in merged_df.columns:
+                    available_columns.insert(-1, 'fat_total')
+                if 'carbs_total' in merged_df.columns:
+                    available_columns.insert(-1, 'carbs_total')
+                
+                # Round the macro_calories for better display
+                display_df = merged_df[available_columns].copy()
+                if 'macro_calories' in display_df.columns:
+                    display_df['macro_calories'] = display_df['macro_calories'].round(0)
+                
+                st.dataframe(display_df.head(10))
+                
+                # Show the difference between Lifesum calories and macro calculation
+                if 'macro_calories' in merged_df.columns:
+                    avg_lifesum = merged_df['calories'].mean()
+                    avg_macro = merged_df['macro_calories'].mean()
+                    difference = avg_macro - avg_lifesum
+                    
+                    st.info(f"📊 **Calorie Comparison:**\n"
+                           f"• Lifesum Average: {avg_lifesum:.0f} cal/day\n"
+                           f"• Macro Calculation: {avg_macro:.0f} cal/day\n"
+                           f"• Difference: {difference:.0f} cal/day ({difference/avg_lifesum*100:.1f}%)")
                 
                 if st.button("Download Merged Data as CSV"):
                     csv = merged_df.to_csv(index=False)
