@@ -7,9 +7,11 @@ import numpy as np
 from datetime import datetime, timedelta, date
 import os
 from pathlib import Path
+import tempfile
 
-# Import our PDF extractor
+# Import our modules
 from pdf_extractor import LifesumPDFExtractor
+from sheets_handler import SheetsHandler
 
 # Page config
 st.set_page_config(
@@ -95,37 +97,17 @@ def load_nutrition_data(nutrition_file=None):
             return None
     return None
 
-def extract_pdfs_to_nutrition_data():
-    """Extract nutrition data from PDFs in data/lifesum folder"""
-    lifesum_folder = Path("data/lifesum")
+def load_nutrition_data():
+    """Load nutrition data from Google Sheets"""
+    sheets = init_sheets_handler()
+    df = sheets.load_nutrition_data()
     
-    if not lifesum_folder.exists():
-        st.error(f"Lifesum folder not found: {lifesum_folder}")
-        st.info("Please create the folder and add your Lifesum PDF files")
-        return None
+    if not df.empty:
+        st.success(f"✅ Loaded {len(df)} nutrition records from Google Sheets")
+    else:
+        st.warning("No nutrition data found in Google Sheets")
     
-    pdf_files = list(lifesum_folder.glob("*.pdf"))
-    if not pdf_files:
-        st.warning(f"No PDF files found in {lifesum_folder}")
-        return None
-    
-    try:
-        # Extract data
-        extractor = LifesumPDFExtractor()
-        extractor.process_folder(lifesum_folder)
-        
-        nutrition_df = extractor.get_daily_nutrition_df()
-        
-        if not nutrition_df.empty:
-            # Remove duplicates (in case same date appears in multiple PDFs)
-            nutrition_df = nutrition_df.drop_duplicates(subset=['date'], keep='last')
-            st.success(f"✅ Extracted data from {len(pdf_files)} PDF files ({len(nutrition_df)} unique days)")
-        
-        return nutrition_df
-        
-    except Exception as e:
-        st.error(f"Error extracting PDF data: {e}")
-        return None
+    return df
 
 def merge_data(weight_df, nutrition_df):
     """Merge weight and nutrition data"""
@@ -283,9 +265,6 @@ def main():
     # Weight Entry Form
     st.sidebar.header("⚖️ Add Weight Entry")
     
-    # Load current weight data to check for duplicates
-    weight_df = load_weight_data()
-    
     with st.sidebar.form("weight_entry_form"):
         # Default to today's date
         entry_date = st.date_input(
@@ -306,63 +285,80 @@ def main():
         submitted = st.form_submit_button("💾 Save Weight")
         
         if submitted:
-            if weight_df is not None:
-                updated_df, message = add_weight_entry(weight_df, entry_date, entry_weight)
+            result = save_weight_entry(entry_date, entry_weight)
+            st.success(result)
+            st.info("📝 Data saved to Google Sheets! Click 'Refresh Data' to see updates.")
+    
+    # PDF Upload Section
+    st.sidebar.header("📄 Upload Nutrition PDF")
+    
+    uploaded_file = st.sidebar.file_uploader(
+        "Drop your Lifesum PDF here",
+        type=['pdf'],
+        help="Upload your weekly Lifesum PDF export"
+    )
+    
+    if uploaded_file is not None:
+        with st.sidebar.spinner("Processing PDF..."):
+            nutrition_df = process_uploaded_pdf(uploaded_file)
+            
+            if not nutrition_df.empty:
+                st.sidebar.success(f"✅ Extracted {len(nutrition_df)} days of nutrition data")
                 
-                if updated_df is not None:
-                    # Save the updated data
-                    if save_weight_data(updated_df):
-                        st.success(message)
-                        st.info("📝 Data saved! Click 'Refresh Data' to see updates in the analysis.")
-                        
-                        # Show if this was an update or new entry
-                        if "Updated" in message:
-                            st.warning("⚠️ You updated an existing entry")
-                    else:
-                        st.error("Failed to save data")
-                else:
-                    st.error(message)
+                # Show preview
+                st.sidebar.subheader("📋 Extracted Data Preview")
+                preview_df = nutrition_df[['date', 'calories', 'protein']].copy()
+                st.sidebar.dataframe(preview_df, hide_index=True)
+                
+                # Save button
+                if st.sidebar.button("💾 Save to Google Sheets"):
+                    result = save_nutrition_data(nutrition_df)
+                    st.sidebar.success(result)
+                    st.sidebar.info("📝 Click 'Refresh Data' to see updates in analysis")
             else:
-                st.error("Could not load weight data")
+                st.sidebar.error("Failed to extract data from PDF")
     
     # Show recent weight entries
+    weight_df = load_weight_data()
     if weight_df is not None and len(weight_df) > 0:
-        st.sidebar.subheader("📋 Recent Entries")
+        st.sidebar.subheader("📋 Recent Weight Entries")
         recent_entries = weight_df.tail(5)[['date', 'weight_kg']].copy()
         recent_entries['date'] = recent_entries['date'].astype(str)
         st.sidebar.dataframe(recent_entries, hide_index=True)
     
     # Load data automatically
-    st.sidebar.write("**Weight Data:**")
-    weight_df = load_weight_data()
-    
-    st.sidebar.write("**Nutrition Data:**")
-    nutrition_data = extract_pdfs_to_nutrition_data()
+    st.sidebar.write("**Data Status:**")
+    nutrition_data = load_nutrition_data()
     
     # Debug information
     if weight_df is not None:
         st.sidebar.write(f"Weight records: {len(weight_df)} days")
-        st.sidebar.write(f"Weight dates: {weight_df['date'].min()} to {weight_df['date'].max()}")
+        if not weight_df.empty:
+            st.sidebar.write(f"Weight dates: {weight_df['date'].min()} to {weight_df['date'].max()}")
     
     if nutrition_data is not None and not nutrition_data.empty:
         st.sidebar.write(f"Nutrition records: {len(nutrition_data)} days") 
         st.sidebar.write(f"Nutrition dates: {nutrition_data['date'].min()} to {nutrition_data['date'].max()}")
     
+    # Show connection status
+    sheets = init_sheets_handler()
+    sheet_info = sheets.get_sheet_info()
+    
+    if sheet_info['connected']:
+        st.sidebar.success("🔗 Connected to Google Sheets")
+    else:
+        st.sidebar.error("❌ Google Sheets connection failed")
+        st.sidebar.error(f"Error: {sheet_info.get('error', 'Unknown error')}")
+    
     # Show file structure info
     st.sidebar.markdown("""
-    **File structure:**
+    **Data Storage:**
     ```
-    📁 GitHub Repository
-    ├── app.py
-    ├── pdf_extractor.py
-    └── data/
-        ├── daily_weight.csv
-        └── lifesum/
-            ├── report1.pdf
-            ├── report2.pdf
-            └── ...
+    📊 Google Sheets: "Bulking Tracker"
+    ├── daily_weight (sheet)
+    └── daily_nutrition (sheet)
     ```
-    **To update data:** Use form above or push files to GitHub
+    **To update:** Use forms above or edit sheets directly
     """)
     
     # Main analysis
