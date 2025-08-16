@@ -1,0 +1,85 @@
+name: Process Lifesum PDFs
+
+on:
+  # Run daily at 8 AM UTC (adjust to your timezone)
+  # Use https://crontab.guru/ to customize the schedule
+  schedule:
+    - cron: '0 8 * * *'
+  
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      folder_id:
+        description: 'Google Drive Folder ID (optional - uses default if empty)'
+        required: false
+        type: string
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  process-pdfs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: 📦 Install dependencies
+        run: |
+          echo "Installing Python dependencies..."
+          pip install --upgrade pip
+          pip install \
+            google-api-python-client>=2.100.0 \
+            google-auth>=2.16.0 \
+            google-auth-httplib2>=0.1.0 \
+            google-auth-oauthlib>=1.0.0 \
+            gspread>=5.12.0 \
+            pdfplumber>=0.10.3 \
+            pandas>=2.0.0 \
+            python-dateutil>=2.8.2
+          
+          echo "Dependencies installed successfully"
+      
+      - name: 🔍 Debug Information
+        if: ${{ github.event.inputs.debug == 'true' }}
+        run: |
+          echo "Python version:"
+          python --version
+          echo ""
+          echo "Installed packages:"
+          pip list
+          echo ""
+          echo "Repository structure:"
+          ls -la
+          echo ""
+          echo "Pipeline directory:"
+          ls -la pipeline/
+      
+      - name: 🚀 Run pipeline
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          DRIVE_FOLDER_ID: ${{ github.event.inputs.folder_id || secrets.DRIVE_FOLDER_ID }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "Starting Bulking Data Pipeline..."
+          python main_pipeline.py
+      
+      - name: 📊 Upload logs (if failed)
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pipeline-error-logs
+          path: |
+            *.log
+            *.txt
+          retention-days: 7
