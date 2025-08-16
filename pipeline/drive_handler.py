@@ -13,7 +13,11 @@ class DriveHandler:
         """Initialize Google Drive API client"""
         self.creds = service_account.Credentials.from_service_account_info(
             credentials_dict,
-            scopes=['https://www.googleapis.com/auth/drive.readonly']
+            scopes=[
+                'https://www.googleapis.com/auth/drive.readonly',
+                'https://www.googleapis.com/auth/drive.file',
+                'https://www.googleapis.com/auth/drive'
+            ]
         )
         self.service = build('drive', 'v3', credentials=self.creds)
     

@@ -12,7 +12,11 @@ class SheetsUpdater:
         """Initialize Google Sheets client"""
         self.creds = Credentials.from_service_account_info(
             credentials_dict,
-            scopes=['https://www.googleapis.com/auth/spreadsheets']
+            scopes=[
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive.file',
+                'https://www.googleapis.com/auth/drive'
+            ]
         )
         self.gc = gspread.authorize(self.creds)
         self.spreadsheet = None
